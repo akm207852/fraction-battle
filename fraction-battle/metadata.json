@@ -1,0 +1,6 @@
+{
+  "name": "Fraction Battle",
+  "description": "Game edukasi matematika battle pecahan senilai bergiliran interaktif untuk siswa SD",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
