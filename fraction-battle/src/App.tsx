@@ -7,6 +7,7 @@ import {
   FractionCardData,
   RoundResult,
   TeacherConfig,
+  GameTimeConfig,
 } from './types';
 import {
   getTargetForRound,
@@ -27,6 +28,11 @@ import { HelpModal } from './components/HelpModal';
 export default function App() {
   const [phase, setPhase] = useState<GamePhase>('setup');
   const [mode, setMode] = useState<GameMode>('quick');
+  const [timeConfig, setTimeConfig] = useState<GameTimeConfig>({
+    mode: 'timed',
+    durationMinutes: 3,
+    timeLimitSeconds: 180,
+  });
   const [teacherConfig, setTeacherConfig] = useState<TeacherConfig | undefined>(
     undefined
   );
@@ -58,10 +64,12 @@ export default function App() {
   const handleStartGame = (
     configuredPlayers: Player[],
     chosenMode: GameMode,
+    chosenTimeConfig: GameTimeConfig,
     customTeacherConfig?: TeacherConfig
   ) => {
     setPlayers(configuredPlayers);
     setMode(chosenMode);
+    setTimeConfig(chosenTimeConfig);
     setTeacherConfig(customTeacherConfig);
 
     const rounds =
@@ -80,13 +88,19 @@ export default function App() {
 
     // Generate puzzle for first player with Level Grid System
     const target = getTargetForRound(1, rounds, customTeacherConfig);
+    const firstPlayer = configuredPlayers[0];
     const { dimension } = getLevelConfig(
       1,
       chosenMode,
       rounds,
-      customTeacherConfig
+      customTeacherConfig,
+      chosenTimeConfig
     );
-    const cards = generateGridCards({ target, gridDimension: dimension });
+    const cards = generateGridCards({
+      target,
+      gridDimension: dimension,
+      playerId: firstPlayer ? firstPlayer.id : 'player_1',
+    });
 
     setCurrentTarget(target);
     setCurrentGridCards(cards);
@@ -94,6 +108,7 @@ export default function App() {
     if (configuredPlayers.length > 1) {
       setPhase('turn_ready');
     } else {
+      // 1 Player Solo mode: start playing immediately
       setPhase('playing');
     }
   };
@@ -184,8 +199,8 @@ export default function App() {
       setActivePlayerIndex(0);
       setCompletedThisRoundPlayerIds([]);
 
-      // Generate new puzzle for the next round
-      const target = getTargetForRound(
+      // Generate new global puzzle target ONLY when advancing to the next round
+      const newRoundTarget = getTargetForRound(
         nextRoundNumber,
         totalRounds,
         teacherConfig
@@ -194,40 +209,48 @@ export default function App() {
         nextRoundNumber,
         mode,
         totalRounds,
-        teacherConfig
+        teacherConfig,
+        timeConfig
       );
-      const cards = generateGridCards({ target, gridDimension: dimension });
+      const firstPlayerOfRound = players[0];
+      const cards = generateGridCards({
+        target: newRoundTarget,
+        gridDimension: dimension,
+        playerId: firstPlayerOfRound ? firstPlayerOfRound.id : 'player_1',
+      });
 
-      setCurrentTarget(target);
+      setCurrentTarget(newRoundTarget);
       setCurrentGridCards(cards);
 
       if (players.length > 1) {
         setPhase('turn_ready');
       } else {
+        // Solo player: langsung main ronde berikutnya
         setPhase('playing');
       }
     } else {
-      // Move to Next Player in the same round
+      // Move to Next Player in the SAME round
       const nextPlayerIdx = activePlayerIndex + 1;
+      const nextPlayer = players[nextPlayerIdx];
       setActivePlayerIndex(nextPlayerIdx);
 
-      // Generate a fresh unique puzzle for the next player
-      const target = getTargetForRound(
-        currentRound,
-        totalRounds,
-        teacherConfig
-      );
+      // ATURAN FAIRNESS: Target tetap SAMA untuk semua pemain di ronde yang sama (currentTarget).
+      // Namun buat susunan kartu (board instance) baru yang diacak khusus untuk pemain ini.
       const { dimension } = getLevelConfig(
         currentRound,
         mode,
         totalRounds,
-        teacherConfig
+        teacherConfig,
+        timeConfig
       );
-      const cards = generateGridCards({ target, gridDimension: dimension });
+      const cards = generateGridCards({
+        target: currentTarget, // TARGET GLOBAL BERSAMA
+        gridDimension: dimension,
+        playerId: nextPlayer ? nextPlayer.id : `player_${nextPlayerIdx + 1}`,
+      });
 
-      setCurrentTarget(target);
+      // Target tidak diubah, hanya grid cards yang di-update untuk pemain baru
       setCurrentGridCards(cards);
-
       setPhase('turn_ready');
     }
   };
@@ -247,7 +270,8 @@ export default function App() {
     currentRound,
     mode,
     totalRounds,
-    teacherConfig
+    teacherConfig,
+    timeConfig
   );
   const isLastTurnOfGame =
     activePlayerIndex === players.length - 1 && currentRound === totalRounds;

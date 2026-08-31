@@ -253,10 +253,10 @@ export const FinalResults: React.FC<FinalResultsProps> = ({
       <div className="bg-gradient-to-b from-blue-700 via-indigo-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-2xl relative overflow-hidden">
         <div className="text-center mb-6">
           <span className="text-xs font-extrabold uppercase tracking-widest text-amber-300">
-            KLASEMEN AKHIR JUARA
+            {players.length === 1 ? 'PENCAPAIAN AKHIR SOLO BATTLE' : 'KLASEMEN AKHIR JUARA'}
           </span>
           <h2 className="text-2xl sm:text-3xl font-black mt-1">
-            Daftar Juara Kelas
+            {players.length === 1 ? 'Hasil Performa Pemain' : 'Daftar Juara Kelas'}
           </h2>
         </div>
 

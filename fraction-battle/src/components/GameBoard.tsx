@@ -13,6 +13,7 @@ import {
   Layers,
   Sparkles,
   Smartphone,
+  Infinity as InfinityIcon,
 } from 'lucide-react';
 
 interface GameBoardProps {
@@ -22,7 +23,7 @@ interface GameBoardProps {
   targetFraction: Fraction;
   gridCards: FractionCardData[];
   gridDimension: number; // 8, 10, 12
-  timeLimit: number; // in seconds (e.g. 30, 25, 20)
+  timeLimit: number; // in seconds (0 for unlimited, or 60, 120, 180, 240, 300)
   onFinishTurn: (selectedCardIds: string[], timeSpent: number) => void;
 }
 
@@ -36,8 +37,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   timeLimit,
   onFinishTurn,
 }) => {
+  const isTimed = timeLimit > 0;
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
-  const [timeLeft, setTimeLeft] = useState<number>(timeLimit);
+  const [timeLeft, setTimeLeft] = useState<number>(isTimed ? timeLimit : 0);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [isSkipModalOpen, setIsSkipModalOpen] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<'fit' | 'normal' | 'large'>('fit');
@@ -47,6 +49,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const startTimeRef = useRef<number>(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const isFinishedRef = useRef<boolean>(false);
+  const selectedCardIdsRef = useRef(selectedCardIds);
+  selectedCardIdsRef.current = selectedCardIds;
 
   // Level determination: Level 1 (8x8), Level 2 (10x10), Level 3 (12x12)
   const currentLevel = gridDimension === 8 ? 1 : gridDimension === 10 ? 2 : 3;
@@ -72,12 +76,28 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     },
   }[currentLevel];
 
+  // Helper format MM:SS
+  const formatTimeDisplay = (seconds: number) => {
+    if (seconds < 0) return '00:00';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
   // Timer countdown
   useEffect(() => {
     startTimeRef.current = Date.now();
     isFinishedRef.current = false;
-    setTimeLeft(timeLimit);
     setSelectedCardIds([]);
+
+    if (!isTimed) {
+      // Mode Tanpa Batas Waktu
+      setTimeLeft(0);
+      return;
+    }
+
+    // Mode Gunakan Waktu
+    setTimeLeft(timeLimit);
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
@@ -87,9 +107,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             isFinishedRef.current = true;
             sound.playTimeUp();
             const timeSpent = timeLimit;
-            // Auto finish on timeout
+            // Auto finish on timeout with latest selected cards
             setTimeout(() => {
-              onFinishTurn(selectedCardIds, timeSpent);
+              onFinishTurn(selectedCardIdsRef.current, timeSpent);
             }, 100);
           }
           return 0;
@@ -106,14 +126,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [player.id, roundNumber, timeLimit]);
-
-  // Keep callback reference updated with latest selectedCardIds
-  const selectedCardIdsRef = useRef(selectedCardIds);
-  selectedCardIdsRef.current = selectedCardIds;
+  }, [player.id, roundNumber, timeLimit, isTimed]);
 
   const handleCardClick = (cardId: string) => {
-    if (timeLeft <= 0 || isFinishedRef.current) return;
+    if (isFinishedRef.current) return;
+    if (isTimed && timeLeft <= 0) return;
 
     if (selectedCardIds.includes(cardId)) {
       sound.playCardDeselect();
@@ -146,10 +163,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     isFinishedRef.current = true;
     if (timerRef.current) clearInterval(timerRef.current);
 
-    const elapsedSeconds = Math.min(
-      timeLimit,
-      Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000))
-    );
+    const elapsedSeconds = isTimed
+      ? Math.min(
+          timeLimit,
+          Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000))
+        )
+      : Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+
     setIsConfirmModalOpen(false);
     onFinishTurn(selectedCardIds, elapsedSeconds);
   };
@@ -159,17 +179,21 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     isFinishedRef.current = true;
     if (timerRef.current) clearInterval(timerRef.current);
 
-    const elapsedSeconds = Math.min(
-      timeLimit,
-      Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000))
-    );
+    const elapsedSeconds = isTimed
+      ? Math.min(
+          timeLimit,
+          Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000))
+        )
+      : Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+
     setIsSkipModalOpen(false);
     onFinishTurn([], elapsedSeconds);
   };
 
-  // Timer Progress Math
-  const timerPercent = (timeLeft / timeLimit) * 100;
-  const isUrgentTime = timeLeft <= 5;
+  // Timer Progress Math & Urgency (<= 30s)
+  const timerPercent = isTimed && timeLimit > 0 ? (timeLeft / timeLimit) * 100 : 100;
+  const isUrgentTime = isTimed && timeLeft <= 30 && timeLeft > 0;
+  const isCriticalTime = isTimed && timeLeft <= 10 && timeLeft > 0;
 
   // Grid styling based on dimension and zoom
   const getGridColsClass = () => {
@@ -223,12 +247,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
   return (
     <div className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-4 relative">
-      {/* Urgent Time Red Vignette Warning Overlay */}
+      {/* Urgent Time Warning Vignette Overlay (<= 30 detik) */}
       {isUrgentTime && (
-        <div className="fixed inset-0 pointer-events-none border-4 sm:border-8 border-rose-500/80 shadow-[inset_0_0_60px_rgba(244,63,94,0.45)] animate-pulse z-40" />
+        <div
+          className={`fixed inset-0 pointer-events-none border-4 sm:border-8 border-rose-500/80 shadow-[inset_0_0_60px_rgba(244,63,94,0.45)] z-40 ${
+            isCriticalTime ? 'animate-pulse' : ''
+          }`}
+        />
       )}
 
-      {/* Low Time Floating Alarm Badge */}
+      {/* Low Time Floating Alarm Badge (<= 30 detik) */}
       {isUrgentTime && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-rose-600 text-white text-xs sm:text-sm font-black px-4 py-1.5 rounded-full shadow-xl shadow-rose-600/40 animate-bounce border-2 border-white flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-300 animate-spin" />
@@ -278,28 +306,41 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
           {/* Timer Display */}
           <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0">
-            <div
-              className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border-2 transition-all ${
-                isUrgentTime
-                  ? 'bg-rose-50 border-rose-500 text-rose-600 animate-pulse'
-                  : 'bg-slate-50 border-slate-200 text-slate-800'
-              }`}
-            >
-              <Clock
-                className={`w-4 h-4 sm:w-5 sm:h-5 ${
-                  isUrgentTime ? 'text-rose-500 animate-spin' : 'text-slate-500'
+            {isTimed ? (
+              <div
+                className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border-2 transition-all ${
+                  isUrgentTime
+                    ? 'bg-rose-50 border-rose-500 text-rose-600 animate-pulse'
+                    : 'bg-slate-50 border-slate-200 text-slate-800'
                 }`}
-              />
-              <div className="flex flex-col items-end leading-none">
-                <span className="text-xl sm:text-3xl font-mono font-black">
-                  {timeLeft}
-                  <span className="text-xs font-bold text-slate-500 ml-0.5">d</span>
-                </span>
-                <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Sisa Waktu
-                </span>
+              >
+                <Clock
+                  className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                    isUrgentTime ? 'text-rose-500 animate-spin' : 'text-slate-500'
+                  }`}
+                />
+                <div className="flex flex-col items-end leading-none">
+                  <span className="text-xl sm:text-2xl font-mono font-black tracking-tight">
+                    {formatTimeDisplay(timeLeft)}
+                  </span>
+                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Sisa Waktu
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border-2 bg-slate-50 border-slate-200 text-slate-700">
+                <InfinityIcon className="w-4 h-4 text-emerald-600" />
+                <div className="flex flex-col items-end leading-none">
+                  <span className="text-xs sm:text-sm font-black text-emerald-700">
+                    Tanpa Batas
+                  </span>
+                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Mode Santai
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Quick Selected Pill */}
             <div className="flex flex-col items-center justify-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-blue-50 border border-blue-100 text-blue-950 min-w-[70px] sm:min-w-[90px]">
@@ -355,15 +396,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           </span>
         </div>
 
-        {/* Timer Progress Bar */}
-        <div className="w-full bg-slate-100 h-2 rounded-full mt-2.5 overflow-hidden">
-          <div
-            className={`h-full transition-all duration-1000 ease-linear rounded-full ${
-              isUrgentTime ? 'bg-rose-500' : 'bg-blue-600'
-            }`}
-            style={{ width: `${timerPercent}%` }}
-          />
-        </div>
+        {/* Timer Progress Bar (Only shown in timed mode) */}
+        {isTimed && (
+          <div className="w-full bg-slate-100 h-2 rounded-full mt-2.5 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-1000 ease-linear rounded-full ${
+                isUrgentTime ? 'bg-rose-500' : 'bg-blue-600'
+              }`}
+              style={{ width: `${timerPercent}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Target Fraction Showcase Banner */}
@@ -418,92 +461,77 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         </div>
 
         {/* Zoom Toggles (Optimized for Smartphone & Desktop) */}
-        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 shadow-xs">
+        <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl">
           <button
             type="button"
             onClick={() => setZoomLevel('fit')}
-            title="Tampilan Pas Layar"
-            className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
               zoomLevel === 'fit'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-white text-blue-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
+            title="Muat Layar Penuh (Fit All)"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
-            <span>Pas</span>
+            <Maximize2 className="w-3 h-3" />
+            <span className="hidden sm:inline">Pas Layar</span>
           </button>
           <button
             type="button"
             onClick={() => setZoomLevel('normal')}
-            title="Ukuran Sedang (Standar HP)"
-            className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
               zoomLevel === 'normal'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-white text-blue-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
+            title="Ukuran Normal"
           >
-            <ZoomOut className="w-3.5 h-3.5" />
-            <span>Sedang</span>
+            <Smartphone className="w-3 h-3" />
+            <span className="hidden sm:inline">Normal</span>
           </button>
           <button
             type="button"
             onClick={() => setZoomLevel('large')}
-            title="Ukuran Besar (Zoom Jelas)"
-            className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
               zoomLevel === 'large'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-white text-blue-700 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
+            title="Perbesar Kartu (Scroll Horizontal & Vertikal)"
           >
-            <ZoomIn className="w-3.5 h-3.5" />
-            <span>Besar</span>
+            <ZoomIn className="w-3 h-3" />
+            <span className="hidden sm:inline">Besar</span>
           </button>
         </div>
       </div>
 
-      {/* Floating Combo Popup */}
+      {/* Floating Combo Popup Notification */}
       {showComboAnimation && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 bg-amber-500 text-white font-black text-base sm:text-xl px-5 sm:px-6 py-2 rounded-full shadow-xl shadow-amber-500/30 animate-bounce flex items-center gap-2 border-2 border-white">
-          <Flame className="w-5 h-5 sm:w-6 sm:h-6 fill-current animate-pulse" />
-          <span>{showComboAnimation}</span>
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-sm sm:text-base px-5 py-2 rounded-2xl shadow-xl shadow-amber-500/30 border-2 border-white animate-bounce pointer-events-none">
+          {showComboAnimation}
         </div>
       )}
 
-      {/* Main Interactive Fraction Grid (Smartphone Readable & Responsive) */}
-      <div className="bg-slate-100/90 p-2 sm:p-3.5 rounded-2xl border border-slate-300 shadow-inner overflow-x-auto scroll-smooth">
-        {/* Mobile Swipe Hint when grid is wide */}
-        <div className="sm:hidden flex items-center justify-between text-[10px] font-semibold text-slate-500 mb-1.5 px-1">
-          <span className="flex items-center gap-1">
-            <Smartphone className="w-3 h-3 text-blue-600" />
-            Sentuh kartu untuk memilih pecahan
-          </span>
-          <span className="text-slate-400">↔ Geser jika terpotong</span>
-        </div>
-
-        <div
-          className={`grid ${getGridColsClass()} gap-1 sm:gap-2 min-w-[340px] sm:min-w-0`}
-        >
+      {/* Interactive Fraction Matrix Grid */}
+      <div className="bg-slate-100/90 rounded-3xl p-2 sm:p-4 border-2 border-slate-200/80 shadow-inner overflow-x-auto max-h-[62vh] overflow-y-auto">
+        <div className={`grid ${getGridColsClass()} gap-1 sm:gap-1.5 min-w-max mx-auto justify-center`}>
           {gridCards.map((card) => {
             const isSelected = selectedCardIds.includes(card.id);
-
             return (
               <button
                 type="button"
                 key={card.id}
                 id={`card-${card.id}`}
                 onClick={() => handleCardClick(card.id)}
-                className={`relative flex flex-col items-center justify-center p-0.5 sm:p-1.5 rounded-xl border-2 transition-all cursor-pointer select-none active:scale-95 touch-manipulation ${
-                  cardConfig.minHeight
-                } ${cardConfig.minWidth} ${
+                className={`relative flex items-center justify-center p-1 sm:p-1.5 rounded-xl border-2 transition-all select-none cursor-pointer transform active:scale-95 ${cardConfig.minWidth} ${cardConfig.minHeight} ${
                   isSelected
-                    ? 'bg-blue-600 border-blue-700 text-white shadow-md shadow-blue-500/30 scale-[1.02] z-10'
-                    : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900 shadow-xs hover:border-slate-300'
+                    ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-500/30 scale-[1.02] z-10'
+                    : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 text-slate-800 shadow-2xs'
                 }`}
               >
-                {/* Selection Badge Indicator (No spoiler on right/wrong during play!) */}
+                {/* Active checkmark badge */}
                 {isSelected && (
-                  <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 w-3 sm:w-3.5 h-3 sm:h-3.5 bg-white text-blue-700 rounded-full flex items-center justify-center shadow-xs">
-                    <CheckCircle2 className="w-3 sm:w-3.5 h-3 sm:h-3.5 fill-white" />
+                  <span className="absolute -top-1 -right-1 bg-amber-400 text-amber-950 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black shadow-xs">
+                    ✓
                   </span>
                 )}
 
@@ -511,7 +539,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   numerator={card.numerator}
                   denominator={card.denominator}
                   size={cardConfig.size}
-                  dark={isSelected}
+                  textColor={isSelected ? 'text-white' : 'text-slate-900'}
+                  lineColor={isSelected ? 'bg-white' : 'bg-slate-800'}
                 />
               </button>
             );
@@ -557,8 +586,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               Kamu telah memilih{' '}
               <strong className="text-blue-600">{selectedCardIds.length} kartu</strong> pada{' '}
               <strong className="text-slate-800">Grid {gridDimension}×{gridDimension}</strong>.
-              Sisa waktu <strong className="text-slate-800">{timeLeft} detik</strong>.
-              Yakin ingin mengakhiri giliran sekarang?
+              {isTimed ? (
+                <>
+                  {' '}Sisa waktu <strong className="text-slate-800">{formatTimeDisplay(timeLeft)}</strong>.
+                </>
+              ) : (
+                <>
+                  {' '}Waktu: <strong className="text-emerald-700">Tanpa Batas</strong>.
+                </>
+              )}
+              {' '}Yakin ingin mengakhiri giliran sekarang?
             </p>
             <div className="grid grid-cols-2 gap-2.5">
               <button
@@ -617,4 +654,3 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     </div>
   );
 };
-

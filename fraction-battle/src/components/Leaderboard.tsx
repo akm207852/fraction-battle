@@ -44,7 +44,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         <div className="flex items-center gap-2">
           <Trophy className="w-4 h-4 text-amber-500 animate-pulse" />
           <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-            <span>KLASEMEN AKADEMIK</span>
+            <span>{players.length === 1 ? 'PROGRES SOLO BATTLE' : 'KLASEMEN AKADEMIK'}</span>
             <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black">
               LIVE
             </span>
