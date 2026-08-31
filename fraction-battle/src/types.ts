@@ -2,12 +2,21 @@ export type GameMode = 'quick' | 'champion' | 'training' | 'teacher';
 
 export type DifficultyLevel = 'easy' | 'medium' | 'hard' | 'mixed';
 export type GridSizeOption = 'auto' | 8 | 10 | 12;
+export type TimeMode = 'timed' | 'unlimited';
+export type DurationMinutes = 1 | 2 | 3 | 4 | 5;
+
+export interface GameTimeConfig {
+  mode: TimeMode;
+  durationMinutes: DurationMinutes;
+  timeLimitSeconds: number; // 0 for unlimited, or 60, 120, 180, 240, 300
+}
 
 export interface TeacherConfig {
   playerCount: number;
   totalRounds: number;
   gridDimension: GridSizeOption;
-  timeLimit: number; // in seconds
+  timeMode?: TimeMode;
+  timeLimit: number; // in seconds (0 for unlimited)
   difficulty: DifficultyLevel;
   selectedTargetFractions?: Fraction[];
 }

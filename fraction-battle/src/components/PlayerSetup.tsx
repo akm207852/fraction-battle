@@ -6,6 +6,9 @@ import {
   DifficultyLevel,
   GridSizeOption,
   Fraction,
+  TimeMode,
+  DurationMinutes,
+  GameTimeConfig,
 } from '../types';
 import {
   Users,
@@ -17,20 +20,22 @@ import {
   GraduationCap,
   Sliders,
   Clock,
-  Grid3X3,
   Flame,
   CheckSquare,
   Square,
   Sparkles,
+  User,
+  Infinity as InfinityIcon,
+  Timer,
 } from 'lucide-react';
 import { sound } from '../utils/audio';
 import { GRADE_4_TARGET_FRACTIONS } from '../utils/mathEngine';
-import { FractionDisplay } from './FractionDisplay';
 
 interface PlayerSetupProps {
   onStartGame: (
     players: Player[],
     mode: GameMode,
+    timeConfig: GameTimeConfig,
     teacherConfig?: TeacherConfig
   ) => void;
 }
@@ -68,10 +73,13 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
     }))
   );
 
+  // Time configurations
+  const [timeMode, setTimeMode] = useState<TimeMode>('timed');
+  const [durationMinutes, setDurationMinutes] = useState<DurationMinutes>(3);
+
   // Teacher Mode configurations
   const [teacherRounds, setTeacherRounds] = useState<number>(5);
   const [teacherGridSize, setTeacherGridSize] = useState<GridSizeOption>('auto');
-  const [teacherTimeLimit, setTeacherTimeLimit] = useState<number>(30);
   const [teacherDifficulty, setTeacherDifficulty] =
     useState<DifficultyLevel>('mixed');
   const [selectedCustomFractions, setSelectedCustomFractions] = useState<
@@ -87,14 +95,22 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
     setMode(newMode);
     if (newMode === 'training') {
       setPlayerCount(1);
-    } else if (playerCount === 1) {
-      setPlayerCount(2);
     }
   };
 
   const handlePlayerCountChange = (count: number) => {
     sound.playCardSelect();
     setPlayerCount(count);
+  };
+
+  const handleTimeModeChange = (newTimeMode: TimeMode) => {
+    sound.playCardSelect();
+    setTimeMode(newTimeMode);
+  };
+
+  const handleDurationChange = (dur: DurationMinutes) => {
+    sound.playCardSelect();
+    setDurationMinutes(dur);
   };
 
   const handleNameChange = (index: number, newName: string) => {
@@ -143,11 +159,19 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sound.playRoundComplete();
+
+    const timeLimitSeconds = timeMode === 'unlimited' ? 0 : durationMinutes * 60;
+    const timeConfig: GameTimeConfig = {
+      mode: timeMode,
+      durationMinutes,
+      timeLimitSeconds,
+    };
+
     const activePlayers: Player[] = playersData
       .slice(0, playerCount)
       .map((p, idx) => ({
         id: `player_${idx + 1}`,
-        name: p.name.trim() || `Pemain ${idx + 1}`,
+        name: p.name.trim() || (playerCount === 1 ? 'Pemain 1' : `Pemain ${idx + 1}`),
         avatar: p.avatar,
         color: p.color,
         score: 0,
@@ -165,7 +189,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
         playerCount,
         totalRounds: teacherRounds,
         gridDimension: teacherGridSize,
-        timeLimit: teacherTimeLimit,
+        timeLimit: timeLimitSeconds,
         difficulty: teacherDifficulty,
         selectedTargetFractions:
           selectedCustomFractions.length > 0
@@ -174,11 +198,11 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
       };
     }
 
-    onStartGame(activePlayers, mode, teacherConfig);
+    onStartGame(activePlayers, mode, timeConfig, teacherConfig);
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8">
+    <div className="w-full max-w-4xl mx-auto px-4 py-6 sm:py-8">
       {/* Title Header */}
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-amber-100 border border-amber-300 text-amber-900 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
@@ -191,13 +215,13 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
           "Battle Pecahan Senilai"
         </p>
         <p className="text-sm text-slate-600 max-w-lg mx-auto mt-2">
-          Kompetisi akademik bergiliran menguji ketangkasan, ketelitian, dan penguasaan konsep pecahan senilai!
+          Kompetisi akademik menguji ketangkasan, ketelitian, dan penguasaan konsep pecahan senilai secara interaktif!
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8">
         {/* Section 1: Mode Selection */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+        <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
           <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-3">
             PILIH MODE PERMAINAN
           </label>
@@ -228,7 +252,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
               </span>
               <span className="text-xs font-semibold text-blue-600">5 Ronde Cepat</span>
               <p className="text-xs text-slate-500 mt-1">
-                Format standar & intens. Grid bertahap 8×8, 10×10, hingga 12×12.
+                Format standar. Grid bertahap 8×8, 10×10, hingga 12×12.
               </p>
             </button>
 
@@ -328,9 +352,204 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
           </div>
         </div>
 
+        {/* Section 2: Player Count Selection */}
+        {mode !== 'training' && (
+          <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                  {mode === 'teacher' ? 'JUMLAH SISWA / PESERTA' : 'JUMLAH PEMAIN'}
+                </label>
+                <p className="text-xs text-slate-500">
+                  {playerCount === 1
+                    ? 'Mode Solo: Bermain mandiri langsung tanpa pergantian giliran'
+                    : 'Pilih jumlah siswa yang akan bertanding secara bergiliran'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-800 font-bold text-sm bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                {playerCount === 1 ? (
+                  <User className="w-4 h-4 text-blue-600" />
+                ) : (
+                  <Users className="w-4 h-4 text-blue-600" />
+                )}
+                <span>
+                  {playerCount} {mode === 'teacher' ? 'Siswa' : 'Pemain'}{' '}
+                  {playerCount === 1 && '(Solo)'}
+                </span>
+              </div>
+            </div>
+
+            {/* 1 - 8 Player Selection Buttons */}
+            <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((count) => (
+                <button
+                  type="button"
+                  key={count}
+                  id={`player-count-btn-${count}`}
+                  onClick={() => handlePlayerCountChange(count)}
+                  className={`h-12 rounded-xl font-black text-base transition-all flex flex-col items-center justify-center cursor-pointer ${
+                    playerCount === count
+                      ? mode === 'teacher'
+                        ? 'bg-purple-600 text-white shadow-md shadow-purple-200 scale-105 ring-2 ring-purple-400'
+                        : 'bg-blue-600 text-white shadow-md shadow-blue-200 scale-105 ring-2 ring-blue-400'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <span>{count}</span>
+                  <span className="text-[9px] font-bold opacity-80 -mt-0.5">
+                    {count === 1 ? 'Solo' : 'Pemain'}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Solo Battle Explanatory Pill */}
+            {playerCount === 1 && (
+              <div className="mt-3 text-xs text-blue-900 bg-blue-50 p-3 rounded-xl border border-blue-200 flex items-center gap-2">
+                <span className="text-base">👤</span>
+                <div>
+                  <strong>Mode 1 Pemain (Solo Battle):</strong> Siswa langsung mengerjakan seluruh ronde permainan secara mandiri tanpa menunggu giliran pemain lain. Skor dan asesmen dihitung penuh!
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Section 3: Time Settings (Mode Waktu & Durasi) */}
+        <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Timer className="w-4 h-4 text-blue-600" />
+                PENGATURAN WAKTU PERMAINAN
+              </label>
+              <p className="text-xs text-slate-500">
+                Pilih apakah ronde dibatasi waktu hitungan mundur atau tanpa batas waktu
+              </p>
+            </div>
+          </div>
+
+          {/* Time Mode Toggle Buttons */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            {/* Tanpa Batas Waktu */}
+            <button
+              type="button"
+              id="time-mode-unlimited-btn"
+              onClick={() => handleTimeModeChange('unlimited')}
+              className={`p-3.5 rounded-xl border-2 text-left flex items-center justify-between transition-all cursor-pointer ${
+                timeMode === 'unlimited'
+                  ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-500/20 shadow-xs'
+                  : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                    timeMode === 'unlimited'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  <InfinityIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="block font-black text-sm text-slate-900">
+                    Tanpa Batas Waktu
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Bermain santai & teliti tanpa countdown
+                  </span>
+                </div>
+              </div>
+              <div
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  timeMode === 'unlimited'
+                    ? 'border-emerald-600 bg-emerald-600 text-white'
+                    : 'border-slate-300'
+                }`}
+              >
+                {timeMode === 'unlimited' && <Check className="w-3 h-3 stroke-[3]" />}
+              </div>
+            </button>
+
+            {/* Gunakan Waktu */}
+            <button
+              type="button"
+              id="time-mode-timed-btn"
+              onClick={() => handleTimeModeChange('timed')}
+              className={`p-3.5 rounded-xl border-2 text-left flex items-center justify-between transition-all cursor-pointer ${
+                timeMode === 'timed'
+                  ? 'border-blue-600 bg-blue-50 text-blue-950 ring-2 ring-blue-500/20 shadow-xs'
+                  : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                    timeMode === 'timed'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="block font-black text-sm text-slate-900">
+                    Gunakan Waktu (Countdown)
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Tantangan berpacu dengan timer (1 - 5 Menit)
+                  </span>
+                </div>
+              </div>
+              <div
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  timeMode === 'timed'
+                    ? 'border-blue-600 bg-blue-600 text-white'
+                    : 'border-slate-300'
+                }`}
+              >
+                {timeMode === 'timed' && <Check className="w-3 h-3 stroke-[3]" />}
+              </div>
+            </button>
+          </div>
+
+          {/* Duration Choices (Only visible when Gunakan Waktu is selected) */}
+          {timeMode === 'timed' && (
+            <div className="pt-3 border-t border-slate-100 animate-in fade-in duration-150">
+              <label className="block text-xs font-bold text-slate-600 mb-2">
+                PILIH DURASI WAKTU PER RONDE:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {([1, 2, 3, 4, 5] as DurationMinutes[]).map((dur) => (
+                  <button
+                    type="button"
+                    key={dur}
+                    id={`duration-btn-${dur}m`}
+                    onClick={() => handleDurationChange(dur)}
+                    className={`py-2.5 px-3 rounded-xl border font-bold text-center transition-all cursor-pointer ${
+                      durationMinutes === dur
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-sm ring-2 ring-blue-300'
+                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    <span className="block text-sm font-black">{dur} Menit</span>
+                    <span className="text-[10px] opacity-80">
+                      {dur * 60} Detik {dur === 3 && '⭐'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-2">
+                ⏱️ Waktu hitungan mundur {durationMinutes} menit ({durationMinutes * 60} detik) berlaku untuk setiap giliran ronde siswa. Peringatan merah akan muncul saat tersisa ≤ 30 detik.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Dedicated Teacher Mode Configuration Panel */}
         {mode === 'teacher' && (
-          <div className="bg-purple-50/60 rounded-3xl p-6 sm:p-7 border-2 border-purple-200 shadow-sm space-y-6 animate-in fade-in duration-200">
+          <div className="bg-purple-50/60 rounded-3xl p-5 sm:p-7 border-2 border-purple-200 shadow-sm space-y-6 animate-in fade-in duration-200">
             <div className="flex items-center justify-between border-b border-purple-200/80 pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-sm">
@@ -341,7 +560,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                     PANEL PENGATURAN GURU (TEACHER CONTROL)
                   </h3>
                   <p className="text-xs text-purple-800 font-medium">
-                    Sesuaikan parameter asesmen dan pembelajaran sesuai RPP & kemampuan siswa
+                    Sesuaikan parameter asesmen dan materi pecahan sesuai RPP & kemampuan siswa
                   </p>
                 </div>
               </div>
@@ -351,7 +570,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               {/* 1. Jumlah Ronde */}
               <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs">
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
@@ -359,69 +578,37 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                   Jumlah Ronde Permainan
                 </label>
                 <p className="text-[11px] text-slate-500 mb-3">
-                  Tentukan berapa babak/ronde yang akan dimainkan setiap siswa
+                  Tentukan berapa banyak babak soal yang akan dikerjakan siswa
                 </p>
-                <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((r) => (
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[1, 2, 3, 5, 10].map((r) => (
                     <button
                       type="button"
                       key={r}
-                      id={`teacher-round-btn-${r}`}
                       onClick={() => {
                         sound.playCardSelect();
                         setTeacherRounds(r);
                       }}
-                      className={`h-10 rounded-xl font-black text-sm transition-all flex items-center justify-center cursor-pointer ${
+                      className={`h-10 rounded-xl font-black text-sm border transition-all cursor-pointer ${
                         teacherRounds === r
-                          ? 'bg-purple-600 text-white shadow-sm scale-105'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                          ? 'border-purple-600 bg-purple-600 text-white shadow-xs'
+                          : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                       }`}
                     >
-                      {r} R
+                      {r} Ronde
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* 2. Waktu Bermain per Giliran */}
+              {/* 2. Ukuran Matrix Grid */}
               <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs">
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-purple-600" />
-                  Waktu Bermain per Giliran
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  Ukuran Grid Pecahan
                 </label>
                 <p className="text-[11px] text-slate-500 mb-3">
-                  Durasi timer siswa untuk mencari pecahan senilai di grid
-                </p>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                  {[15, 20, 25, 30, 45, 60].map((t) => (
-                    <button
-                      type="button"
-                      key={t}
-                      id={`teacher-time-btn-${t}`}
-                      onClick={() => {
-                        sound.playCardSelect();
-                        setTeacherTimeLimit(t);
-                      }}
-                      className={`h-10 rounded-xl font-black text-xs transition-all flex items-center justify-center cursor-pointer ${
-                        teacherTimeLimit === t
-                          ? 'bg-purple-600 text-white shadow-sm scale-105'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
-                      }`}
-                    >
-                      {t}s
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 3. Ukuran Grid */}
-              <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs">
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
-                  <Grid3X3 className="w-3.5 h-3.5 text-purple-600" />
-                  Ukuran Grid Kartu
-                </label>
-                <p className="text-[11px] text-slate-500 mb-3">
-                  Pilih ukuran matriks kartu pecahan di arena
+                  Pilih ukuran papan pecahan atau biarkan otomatis bertahap
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -430,16 +617,14 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                       sound.playCardSelect();
                       setTeacherGridSize('auto');
                     }}
-                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
                       teacherGridSize === 'auto'
-                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold shadow-2xs'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold'
                         : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
-                    <span className="block text-xs font-black">Otomatis Bertingkat</span>
-                    <span className="text-[10px] text-slate-500">
-                      Level 1 (8×8) ➔ Level 3 (12×12)
-                    </span>
+                    <span className="block text-xs font-black">Otomatis (Bertahap)</span>
+                    <span className="text-[10px] text-slate-500">8×8 ➔ 10×10 ➔ 12×12</span>
                   </button>
 
                   <button
@@ -448,14 +633,14 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                       sound.playCardSelect();
                       setTeacherGridSize(8);
                     }}
-                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
                       teacherGridSize === 8
-                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold shadow-2xs'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold'
                         : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <span className="block text-xs font-black">8 × 8 (64 Kartu)</span>
-                    <span className="text-[10px] text-slate-500">Dasar & Nyaman</span>
+                    <span className="text-[10px] text-slate-500">Tingkat Dasar</span>
                   </button>
 
                   <button
@@ -464,14 +649,14 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                       sound.playCardSelect();
                       setTeacherGridSize(10);
                     }}
-                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
                       teacherGridSize === 10
-                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold shadow-2xs'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold'
                         : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <span className="block text-xs font-black">10 × 10 (100 Kartu)</span>
-                    <span className="text-[10px] text-slate-500">Menengah</span>
+                    <span className="text-[10px] text-slate-500">Tingkat Menengah</span>
                   </button>
 
                   <button
@@ -480,9 +665,9 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                       sound.playCardSelect();
                       setTeacherGridSize(12);
                     }}
-                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                    className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
                       teacherGridSize === 12
-                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold shadow-2xs'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold'
                         : 'border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
@@ -492,16 +677,13 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                 </div>
               </div>
 
-              {/* 4. Tingkat Kesulitan */}
-              <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs">
+              {/* 3. Tingkat Kesulitan */}
+              <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-2xs md:col-span-2">
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-600" />
                   Tingkat Kesulitan Pecahan
                 </label>
-                <p className="text-[11px] text-slate-500 mb-3">
-                  Kelompok pecahan yang akan diujikan pada sesi ini
-                </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -569,7 +751,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
               </div>
             </div>
 
-            {/* 5. Pemilihan Pecahan Target Spesifik (Custom List) */}
+            {/* 4. Pemilihan Pecahan Target Spesifik (Custom List) */}
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-2xs">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div>
@@ -577,7 +759,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                     PILIHAN PECAHAN TARGET SPESIFIK (OPSIONAL)
                   </label>
                   <p className="text-[11px] text-slate-500">
-                    Klik pecahan di bawah jika Anda ingin hanya menguji pecahan tertentu. Kosongkan untuk memilih otomatis.
+                    Klik pecahan di bawah jika ingin menguji pecahan target tertentu. Kosongkan untuk memilih otomatis.
                   </p>
                 </div>
 
@@ -649,58 +831,14 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
           </div>
         )}
 
-        {/* Section 2: Player Count Selection */}
-        {mode !== 'training' && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                  {mode === 'teacher' ? 'JUMLAH SISWA / PESERTA' : 'BERAPA PEMAIN?'}
-                </label>
-                <p className="text-xs text-slate-500">
-                  {mode === 'teacher'
-                    ? 'Tentukan jumlah siswa yang akan dinilai secara bergiliran (1 - 8 siswa)'
-                    : 'Pilih jumlah siswa yang akan bertanding secara bergiliran (2 - 8 pemain)'}
-                </p>
-              </div>
-              <div className="flex items-center gap-1 text-slate-700 font-bold text-sm bg-slate-100 px-3 py-1 rounded-full">
-                <Users className="w-4 h-4" />
-                <span>{playerCount} {mode === 'teacher' ? 'Siswa' : 'Pemain'}</span>
-              </div>
-            </div>
-
-            <div className={`grid gap-2 ${mode === 'teacher' ? 'grid-cols-8' : 'grid-cols-7'}`}>
-              {(mode === 'teacher' ? [1, 2, 3, 4, 5, 6, 7, 8] : [2, 3, 4, 5, 6, 7, 8]).map(
-                (count) => (
-                  <button
-                    type="button"
-                    key={count}
-                    id={`player-count-btn-${count}`}
-                    onClick={() => handlePlayerCountChange(count)}
-                    className={`h-12 rounded-xl font-black text-lg transition-all flex items-center justify-center cursor-pointer ${
-                      playerCount === count
-                        ? mode === 'teacher'
-                          ? 'bg-purple-600 text-white shadow-md shadow-purple-200 scale-105'
-                          : 'bg-blue-600 text-white shadow-md shadow-blue-200 scale-105'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {count}
-                  </button>
-                )
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Section 3: Player Details (Names & Avatars) */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+        {/* Section 4: Player Details (Names & Avatars) */}
+        <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
           <div className="flex items-center justify-between mb-4">
             <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-500">
-              {mode === 'teacher' ? 'DAFTAR NAMA SISWA' : 'PROFIL PEMAIN'}
+              {playerCount === 1 ? 'PROFIL PEMAIN (SOLO BATTLE)' : mode === 'teacher' ? 'DAFTAR NAMA SISWA' : 'PROFIL PEMAIN'}
             </label>
             <span className="text-xs text-slate-400 font-medium">
-              Ketik nama siswa untuk laporan asesmen
+              Ketik nama siswa untuk sertifikat & laporan
             </span>
           </div>
 
@@ -729,7 +867,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[11px] font-bold text-slate-400">
-                      {mode === 'teacher' ? `Siswa ${idx + 1}` : `Pemain ${idx + 1}`}
+                      {playerCount === 1 ? 'Pemain Utama' : mode === 'teacher' ? `Siswa ${idx + 1}` : `Pemain ${idx + 1}`}
                     </span>
                     <span
                       className="w-2.5 h-2.5 rounded-full"
@@ -742,7 +880,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
                     value={playersData[idx].name}
                     onChange={(e) => handleNameChange(idx, e.target.value)}
                     maxLength={20}
-                    placeholder={mode === 'teacher' ? `Nama Siswa ${idx + 1}` : `Nama Pemain ${idx + 1}`}
+                    placeholder={playerCount === 1 ? 'Nama Kamu' : mode === 'teacher' ? `Nama Siswa ${idx + 1}` : `Nama Pemain ${idx + 1}`}
                     className="w-full bg-transparent font-bold text-slate-800 text-sm focus:outline-none placeholder:text-slate-400"
                     required
                   />
@@ -765,7 +903,9 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
           >
             <Play className="w-6 h-6 fill-current" />
             <span>
-              {mode === 'teacher'
+              {playerCount === 1
+                ? 'MULAI SOLO BATTLE SEKARANG!'
+                : mode === 'teacher'
                 ? 'MULAI SESI TEACHER MODE'
                 : 'MULAI BATTLE SEKARANG!'}
             </span>
@@ -778,7 +918,7 @@ export const PlayerSetup: React.FC<PlayerSetupProps> = ({ onStartGame }) => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
             <h3 className="font-bold text-slate-900 text-base mb-1">
-              Pilih Avatar {mode === 'teacher' ? 'Siswa' : 'Pemain'} {activeAvatarModalIndex + 1}
+              Pilih Avatar {playerCount === 1 ? 'Pemain' : `Pemain ${activeAvatarModalIndex + 1}`}
             </h3>
             <p className="text-xs text-slate-500 mb-4">
               Pilih karakter ikon favorit

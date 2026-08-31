@@ -25,22 +25,27 @@ export const TurnTransition: React.FC<TurnTransitionProps> = ({
   const [countNumber, setCountNumber] = useState<number>(3);
 
   const level = gridDimension === 8 ? 1 : gridDimension === 10 ? 2 : 3;
+  const timeDesc =
+    timeLimit > 0
+      ? `${timeLimit >= 60 ? `${Math.round(timeLimit / 60)} Menit` : `${timeLimit} Detik`}`
+      : 'Tanpa Batas Waktu';
+
   const levelBadge =
     level === 1
       ? {
           name: 'Level 1 (8×8)',
-          desc: '64 Kartu • 30 Detik',
+          desc: `64 Kartu • ${timeDesc}`,
           className: 'bg-emerald-100 text-emerald-900 border-emerald-300',
         }
       : level === 2
       ? {
           name: 'Level 2 (10×10)',
-          desc: '100 Kartu • 25 Detik',
+          desc: `100 Kartu • ${timeDesc}`,
           className: 'bg-blue-100 text-blue-900 border-blue-300',
         }
       : {
           name: 'Level 3 (12×12)',
-          desc: '144 Kartu • 20 Detik',
+          desc: `144 Kartu • ${timeDesc}`,
           className: 'bg-purple-100 text-purple-900 border-purple-300',
         };
 
@@ -141,7 +146,7 @@ export const TurnTransition: React.FC<TurnTransitionProps> = ({
                 className="text-xs sm:text-sm text-slate-300 font-semibold mt-8 flex items-center gap-1.5"
               >
                 <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-                Grid {gridDimension}×{gridDimension} • {timeLimit} Detik
+                Grid {gridDimension}×{gridDimension} • {timeDesc}
               </motion.p>
             </div>
           </motion.div>
@@ -215,7 +220,7 @@ export const TurnTransition: React.FC<TurnTransitionProps> = ({
               Grid {gridDimension}×{gridDimension} ({gridDimension * gridDimension} Kartu)
             </span>
             <span className="bg-white px-3 py-1.5 rounded-xl shadow-xs border border-slate-200 font-mono">
-              ⏱️ {timeLimit} Detik
+              ⏱️ {timeDesc}
             </span>
           </div>
         </div>

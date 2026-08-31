@@ -4,7 +4,15 @@ import {
   GameMode,
   GridLevelConfig,
   TeacherConfig,
+  GameTimeConfig,
 } from '../types';
+
+export function formatTimeSeconds(seconds: number): string {
+  if (seconds <= 0) return '00:00';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 export function gcd(a: number, b: number): number {
   let x = Math.abs(a);
@@ -49,15 +57,15 @@ export function getLevelConfig(
   roundNumber: number,
   mode: GameMode = 'quick',
   totalRounds: number = 5,
-  teacherConfig?: TeacherConfig
+  teacherConfig?: TeacherConfig,
+  timeConfig?: GameTimeConfig
 ): GridLevelConfig {
   let level: 1 | 2 | 3 = 1;
   let dimension: 8 | 10 | 12 = 8;
-  let timeLimit = 30;
+  let timeLimit = 180; // default 3 minutes (180s)
 
+  // Tentukan dimensi level
   if (mode === 'teacher' && teacherConfig) {
-    // Custom settings from teacher
-    timeLimit = teacherConfig.timeLimit || 30;
     if (teacherConfig.gridDimension === 'auto') {
       const progress = roundNumber / Math.max(totalRounds, 1);
       if (progress <= 0.4) {
@@ -79,46 +87,55 @@ export function getLevelConfig(
     if (roundNumber <= 2) {
       level = 1;
       dimension = 8;
-      timeLimit = 30;
     } else if (roundNumber <= 4) {
       level = 2;
       dimension = 10;
-      timeLimit = 25;
     } else {
       level = 3;
       dimension = 12;
-      timeLimit = 20;
     }
   } else if (mode === 'champion') {
     // 10 Ronde: R1-3 (Level 1: 8x8), R4-7 (Level 2: 10x10), R8-10 (Level 3: 12x12)
     if (roundNumber <= 3) {
       level = 1;
       dimension = 8;
-      timeLimit = 30;
     } else if (roundNumber <= 7) {
       level = 2;
       dimension = 10;
-      timeLimit = 25;
     } else {
       level = 3;
       dimension = 12;
-      timeLimit = 20;
     }
   } else {
-    // Mode Latihan Mandiri / Training (5 Ronde): R1-2 (Level 1), R3-4 (Level 2), R5+ (Level 3)
+    // Mode Latihan Mandiri / Training: R1-2 (Level 1), R3-4 (Level 2), R5+ (Level 3)
     if (roundNumber <= 2) {
       level = 1;
       dimension = 8;
-      timeLimit = 35;
     } else if (roundNumber <= 4) {
       level = 2;
       dimension = 10;
-      timeLimit = 30;
     } else {
       level = 3;
       dimension = 12;
-      timeLimit = 25;
     }
+  }
+
+  // Tentukan aturan waktu berdasarkan GameTimeConfig atau TeacherConfig
+  if (timeConfig) {
+    if (timeConfig.mode === 'unlimited') {
+      timeLimit = 0; // 0 menandakan Tanpa Batas Waktu
+    } else {
+      timeLimit = timeConfig.timeLimitSeconds || 180;
+    }
+  } else if (mode === 'teacher' && teacherConfig) {
+    if (teacherConfig.timeMode === 'unlimited' || teacherConfig.timeLimit === 0) {
+      timeLimit = 0;
+    } else {
+      timeLimit = teacherConfig.timeLimit || 180;
+    }
+  } else {
+    // Fallback default jika tidak ada config: 3 Menit (180 detik)
+    timeLimit = 180;
   }
 
   const levelConfigs: Record<
@@ -481,26 +498,30 @@ export function generateCardExplanation(
   }
 }
 
+export function getCorrectCountForDimension(dimension: number): number {
+  if (dimension === 8) return 8; // 8 benar, 56 distraktor
+  if (dimension === 10) return 12; // 12 benar, 88 distraktor
+  if (dimension === 12) return 18; // 18 benar, 126 distraktor
+  return Math.max(4, Math.floor(dimension * dimension * 0.125));
+}
+
 interface GridGenerationConfig {
   target: Fraction;
   gridDimension: number; // e.g. 8, 10, 12
+  playerId?: string;
+  exactCorrectCount?: number;
 }
 
 export function generateGridCards({
   target,
   gridDimension,
+  playerId = 'player',
+  exactCorrectCount,
 }: GridGenerationConfig): FractionCardData[] {
   const totalCards = gridDimension * gridDimension;
 
-  // Tentukan jumlah kartu pecahan benar
-  let correctCount = 8;
-  if (gridDimension === 8) {
-    correctCount = Math.floor(Math.random() * 5) + 6; // 6 to 10
-  } else if (gridDimension === 10) {
-    correctCount = Math.floor(Math.random() * 6) + 10; // 10 to 15
-  } else if (gridDimension === 12) {
-    correctCount = Math.floor(Math.random() * 11) + 15; // 15 to 25
-  }
+  // Jumlah pecahan benar yang terjamin sama (FAIR) untuk semua pemain dalam level/grid yang sama
+  const correctCount = exactCorrectCount ?? getCorrectCountForDimension(gridDimension);
 
   const existingSignatures = new Set<string>();
   const correctFractions: Fraction[] = [];
@@ -511,10 +532,12 @@ export function generateGridCards({
   // Buat kumpulan faktor pengali unik untuk pecahan senilai
   // Termasuk pengali 1 (pecahan dasar), 2, 3, 4, 5, 6, 7, 8, dst.
   const multiplierCandidates: number[] = [];
-  for (let m = 1; m <= 30; m++) {
+  for (let m = 1; m <= 35; m++) {
     multiplierCandidates.push(m);
   }
-  // Shuffle multiplier candidates
+  
+  // Acak urutan faktor pengali untuk pemain ini (Fisher-Yates)
+  // Ini memastikan Andi, Budi, Citra bisa mendapatkan variasi pecahan senilai yang berbeda (misal 6/8, 9/12 vs 15/20, 21/28)
   for (let i = multiplierCandidates.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [multiplierCandidates[i], multiplierCandidates[j]] = [
@@ -523,7 +546,7 @@ export function generateGridCards({
     ];
   }
 
-  // Masukkan pecahan senilai
+  // Masukkan pecahan senilai sampai memenuhi target jumlah benar yang adil
   for (const m of multiplierCandidates) {
     if (correctFractions.length >= correctCount) break;
     const num = base.numerator * m;
@@ -540,7 +563,7 @@ export function generateGridCards({
   const neededDistractors = totalCards - correctFractions.length;
 
   let attempts = 0;
-  while (distractorFractions.length < neededDistractors && attempts < 2000) {
+  while (distractorFractions.length < neededDistractors && attempts < 2500) {
     attempts++;
     let dNum = 1;
     let dDen = 2;
@@ -659,12 +682,13 @@ export function generateGridCards({
     fallbackCount++;
   }
 
-  // Gabungkan dan beri metadata
+  // Gabungkan dan beri metadata unik per pemain
   const allCards: FractionCardData[] = [];
+  const sessionNonce = Math.random().toString(36).substring(2, 7);
 
   correctFractions.forEach((f, idx) => {
     allCards.push({
-      id: `correct_${idx}_${f.numerator}_${f.denominator}_${Math.random()}`,
+      id: `${playerId}_c_${idx}_${f.numerator}_${f.denominator}_${sessionNonce}`,
       numerator: f.numerator,
       denominator: f.denominator,
       isEquivalent: true,
@@ -674,7 +698,7 @@ export function generateGridCards({
 
   distractorFractions.forEach((f, idx) => {
     allCards.push({
-      id: `distractor_${idx}_${f.numerator}_${f.denominator}_${Math.random()}`,
+      id: `${playerId}_d_${idx}_${f.numerator}_${f.denominator}_${sessionNonce}`,
       numerator: f.numerator,
       denominator: f.denominator,
       isEquivalent: false,
@@ -682,13 +706,56 @@ export function generateGridCards({
     });
   });
 
-  // Fisher-Yates Shuffle agar posisi seluruh kartu teracak sempurna
+  // Fisher-Yates Shuffle agar posisi seluruh kartu teracak sempurna dan unik untuk pemain ini
   for (let i = allCards.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [allCards[i], allCards[j]] = [allCards[j], allCards[i]];
   }
 
   return allCards;
+}
+
+/**
+ * Validasi keadilan (Fairness check) antar papan pemain dalam satu ronde
+ */
+export function checkRoundFairness(
+  playerBoards: Array<{ playerId: string; cards: FractionCardData[] }>,
+  targetFraction: Fraction
+): { isFair: boolean; reason?: string } {
+  if (playerBoards.length <= 1) {
+    return { isFair: true };
+  }
+
+  const expectedCorrectCount = playerBoards[0].cards.filter((c) => c.isEquivalent).length;
+
+  for (let i = 0; i < playerBoards.length; i++) {
+    const board = playerBoards[i];
+    const correctCount = board.cards.filter((c) => c.isEquivalent).length;
+    if (correctCount !== expectedCorrectCount) {
+      return {
+        isFair: false,
+        reason: `Jumlah kartu pecahan senilai tidak sama: Pemain 1 (${expectedCorrectCount}) vs Pemain ${i + 1} (${correctCount})`,
+      };
+    }
+
+    // Verifikasi bahwa semua kartu bertanda isEquivalent benar-benar senilai dengan target
+    for (const card of board.cards) {
+      const actuallyEq = isEquivalentFraction(
+        targetFraction.numerator,
+        targetFraction.denominator,
+        card.numerator,
+        card.denominator
+      );
+      if (actuallyEq !== card.isEquivalent) {
+        return {
+          isFair: false,
+          reason: `Pecahan ${card.numerator}/${card.denominator} salah status ekivalensi dengan target ${targetFraction.numerator}/${targetFraction.denominator}`,
+        };
+      }
+    }
+  }
+
+  return { isFair: true };
 }
 
 /**
