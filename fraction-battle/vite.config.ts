@@ -4,10 +4,10 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
-  return {
-    plugins: [react(), tailwindcss()],
-    resolve: {
-      alias: {
+return {
+  base: '/fraction-battle/',
+  plugins: [react(), tailwindcss()],
+  resolve: {      alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
